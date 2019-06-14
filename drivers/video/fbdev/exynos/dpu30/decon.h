@@ -1214,6 +1214,11 @@ struct decon_freq_hop {
 	u32 request_k;	/* user requested k value */
 };
 
+struct decon_edid_data {
+	int size;
+	u8 edid_data[EDID_BLOCK_SIZE * MAX_EDID_BLOCK];
+};
+
 struct decon_device {
 	int id;
 	enum decon_state state;
@@ -1453,6 +1458,8 @@ int decon_displayport_get_config(struct decon_device *dex,
 		struct exynos_displayport_data *displayport_data);
 int decon_displayport_set_config(struct decon_device *dex,
 		struct exynos_displayport_data *displayport_data);
+int decon_displayport_get_edid(struct decon_device *decon,
+		struct decon_edid_data *edid);
 void decon_displayport_under_flow_int_mask(u32 decon_id);
 #endif
 
@@ -2015,4 +2022,7 @@ int decon_handle_recovery(struct decon_device *decon);
 #define V4L2_EVENT_DECON_FRAME_DONE     (V4L2_EVENT_DECON + 2)
 #define V4L2_EVENT_DECON_VSYNC          (V4L2_EVENT_DECON + 3)
 #endif
+
+/* EDID data */
+#define EXYNOS_GET_EDID		_IOW('F', 800, struct decon_edid_data)
 #endif /* ___SAMSUNG_DECON_H__ */
