@@ -14,6 +14,13 @@
 
 #include "ion.h"
 
+/*
+ * We avoid atomic_long_t to minimize cache flushes at the cost of possible
+ * race which would result in a small accounting inaccuracy that we can
+ * tolerate.
+ */
+static long nr_total_pages;
+
 static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool, bool nozero)
 {
 	gfp_t gfpmask = pool->gfp_mask;
@@ -51,6 +58,7 @@ static void ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
 		pool->low_count++;
 	}
 
+	nr_total_pages += 1 << pool->order;
 	mod_node_page_state(page_pgdat(page), NR_INDIRECTLY_RECLAIMABLE_BYTES,
 			    (1 << (PAGE_SHIFT + pool->order)));
 	mutex_unlock(&pool->mutex);
@@ -71,6 +79,7 @@ static struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high)
 	}
 
 	list_del(&page->lru);
+	nr_total_pages -= 1 << pool->order;
 	mod_node_page_state(page_pgdat(page), NR_INDIRECTLY_RECLAIMABLE_BYTES,
 			    -(1 << (PAGE_SHIFT + pool->order)));
 	return page;
@@ -136,6 +145,14 @@ static int ion_page_pool_total(struct ion_page_pool *pool, bool high)
 		count += pool->high_count;
 
 	return count << pool->order;
+}
+
+long ion_page_pool_nr_pages(void)
+{
+	/* Correct possible overflow caused by racing writes */
+	if (nr_total_pages < 0)
+		nr_total_pages = 0;
+	return nr_total_pages;
 }
 
 int ion_page_pool_shrink(struct ion_page_pool *pool, gfp_t gfp_mask,
