@@ -488,7 +488,8 @@ ifneq ($(KBUILD_SRC),)
 	    $(srctree) $(objtree) $(VERSION) $(PATCHLEVEL)
 endif
 
-PLATFORM_VERSION ?= 10.0
+PLATFORM_VERSION ?= 13.0
+export PLATFORM_VERSION
 
 ifneq ($(PLATFORM_VERSION), )
 PLATFORM_VERSION_NUMBER=$(shell $(CONFIG_SHELL) $(srctree)/scripts/android-version.sh $(PLATFORM_VERSION))
