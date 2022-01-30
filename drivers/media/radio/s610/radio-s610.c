@@ -1607,7 +1607,7 @@ static int s610_radio_fops_open(struct file *file)
 			}
 
 			abox_request_cpu_gear_sync(radio->a_dev,
-				dev_get_drvdata(radio->a_dev), (unsigned int)radio->dev, ABOX_CPU_GEAR_MAX, "FM");
+				dev_get_drvdata(radio->a_dev), (unsigned int)(uintptr_t)radio->dev, ABOX_CPU_GEAR_MAX, "FM");
 		}
 #endif /* USE_AUDIO_PM */
 
@@ -1725,7 +1725,7 @@ static int s610_radio_fops_release(struct file *file)
 #ifdef USE_AUDIO_PM
 		if (radio->a_dev) {
 			abox_request_cpu_gear_sync(radio->a_dev,
-				dev_get_drvdata(radio->a_dev), (unsigned int)radio->dev, ABOX_CPU_GEAR_MIN, "FM");
+				dev_get_drvdata(radio->a_dev), (unsigned int)(uintptr_t)radio->dev, ABOX_CPU_GEAR_MIN, "FM");
 
 			pm_runtime_put_sync(radio->a_dev);
 		}
