@@ -205,9 +205,6 @@ obj-y				+= samsung/
 # uH
 obj-$(CONFIG_UH)		+= uh/
 
-# OLOG
-obj-y				+= kperfmon/
-
 # SPU signature verify
 obj-$(CONFIG_SPU_VERIFY) += spu_verify/
 obj-y += regulator/pmic_class/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
