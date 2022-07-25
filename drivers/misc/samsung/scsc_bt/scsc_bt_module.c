@@ -585,7 +585,7 @@ static int slsi_sm_ant_service_cleanup_stop_service(void)
 #endif
 
 #ifdef CONFIG_SCSC_ANT
-static int slsi_sm_ant_service_cleanup()
+static int slsi_sm_ant_service_cleanup(void)
 {
 	int ret = 0;
 
@@ -1301,7 +1301,7 @@ static int slsi_sm_bt_service_stop()
 
 #ifdef CONFIG_SCSC_ANT
 /* Stop the ANT service */
-static int slsi_sm_ant_service_stop()
+static int slsi_sm_ant_service_stop(void)
 {
 	SCSC_TAG_INFO(BT_COMMON, "ant service users %u\n", atomic_read(&ant_service.service_users));
 
