@@ -1490,7 +1490,7 @@ int aud3003x_register_notifier(struct notifier_block *n,
  * If the interrup belongs to codec, then it notify the interrupt to the codec.
  * The notifier is the way to communicate between them.
  */
-void aud3003x_call_notifier()
+void aud3003x_call_notifier(void)
 {
 	struct aud3003x_priv *aud3003x = codec_notifier_t.aud3003x;
 	struct aud3003x_jack *jackdet = aud3003x->p_jackdet;
