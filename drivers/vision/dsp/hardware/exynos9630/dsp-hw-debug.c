@@ -1618,7 +1618,7 @@ static int dsp_hw_debug_write_log_binary(struct dsp_hw_debug *debug)
 
 	for (idx = 0; idx < data_count; ++idx) {
 		write_size = snprintf(line, sizeof(line), "[%6d]%s",
-				idx, kva + (data_size * idx));
+				idx, (char *)(kva + (data_size * idx)));
 		if (write_size < 9)
 			continue;
 
