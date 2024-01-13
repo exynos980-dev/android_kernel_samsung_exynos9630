@@ -663,8 +663,8 @@ int is_debug_dma_dump(struct is_queue *queue, u32 index, u32 vid, u32 type)
 		if (unlikely(!filename))
 			return -ENOMEM;
 
-			snprintf(filename, PATH_MAX, "%s/V%02d_F%08d_I%02d_R%d.raw",
-					DBG_DMA_DUMP_PATH, vid, frame->fcount, index, region_id);
+		snprintf(filename, PATH_MAX, "%s/V%02d_F%08d_I%02d_R%d.raw",
+				DBG_DMA_DUMP_PATH, vid, frame->fcount, index, region_id);
 
 			/* Dump each plane */
 		for (i = 0; i < (buf->num_planes - 1); i++) {
@@ -672,8 +672,8 @@ int is_debug_dma_dump(struct is_queue *queue, u32 index, u32 vid, u32 type)
 					bin.data = (void *)frame->stripe_info.kva[region_id][i];
 					bin.size = frame->stripe_info.size[region_id][i];
 				} else {
-			bin.data = (void *)queue->buf_kva[index][i];
-			bin.size = queue->framecfg.size[i];
+					bin.data = (void *)queue->buf_kva[index][i];
+					bin.size = queue->framecfg.size[i];
 				}
 
 				if (!bin.data) {
