@@ -1915,19 +1915,6 @@
 					vbmeta {
 						status = "disabled";
 					};
-
-					fstab {
-						compatible = "android,fstab";
-
-						vendor {
-							compatible = "android,vendor";
-							status = "disabled";
-							dev = "/dev/block/platform/13600000.ufs/by-name/vendor";
-							type = "ext4";
-							mnt_flags = "ro";
-							fsmgr_flags = "wait,avb";
-						};
-					};
 				};
 			};
 
