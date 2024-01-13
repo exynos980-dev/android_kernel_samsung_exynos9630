@@ -399,7 +399,7 @@ struct scsc_log_collector_client bt_collect_hcf_client = {
 };
 #endif
 
-static bool scsc_recovery_in_progress()
+static bool scsc_recovery_in_progress(void)
 {
 #ifdef CONFIG_SCSC_ANT
 	return bt_service.recovery_level != 0 || ant_service.recovery_level != 0;
@@ -408,7 +408,7 @@ static bool scsc_recovery_in_progress()
 #endif
 }
 
-static int slsi_sm_bt_service_cleanup()
+static int slsi_sm_bt_service_cleanup(void)
 {
 	int ret = 0;
 
@@ -1283,7 +1283,7 @@ exit:
 #endif
 
 /* Stop the BT service */
-static int slsi_sm_bt_service_stop()
+static int slsi_sm_bt_service_stop(void)
 {
 	SCSC_TAG_INFO(BT_COMMON, "bt service users %u\n", atomic_read(&bt_service.service_users));
 
