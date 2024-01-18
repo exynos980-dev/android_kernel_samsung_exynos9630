@@ -80,7 +80,7 @@ static int soc_compr_open(struct snd_compr_stream *cstream)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	if (cpu_dai->driver->cops && cpu_dai->driver->cops->startup) {
 		ret = cpu_dai->driver->cops->startup(cstream, cpu_dai);
@@ -108,7 +108,7 @@ static int soc_compr_open(struct snd_compr_stream *cstream)
 
 	snd_soc_runtime_activate(rtd, cstream->direction);
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 
 	return 0;
 
@@ -118,7 +118,7 @@ machine_err:
 	if (cpu_dai->driver->cops && cpu_dai->driver->cops->shutdown)
 		cpu_dai->driver->cops->shutdown(cstream, cpu_dai);
 out:
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -194,7 +194,9 @@ static int soc_compr_open_fe(struct snd_compr_stream *cstream)
 	fe->dpcm[stream].state = SND_SOC_DPCM_STATE_OPEN;
 	fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_NO;
 
+	mutex_lock_nested(&fe->card->pcm_mutex, fe->card->pcm_subclass);
 	snd_soc_runtime_activate(fe, stream);
+	mutex_unlock(&fe->card->pcm_mutex);
 
 	mutex_unlock(&fe->card->mutex);
 
@@ -224,7 +226,7 @@ static void close_delayed_work(struct work_struct *work)
 			container_of(work, struct snd_soc_pcm_runtime, delayed_work.work);
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	dev_dbg(rtd->dev,
 		"Compress ASoC: pop wq checking: %s status: %s waiting: %s\n",
@@ -239,7 +241,7 @@ static void close_delayed_work(struct work_struct *work)
 					  SND_SOC_DAPM_STREAM_STOP);
 	}
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 }
 
 static int soc_compr_free(struct snd_compr_stream *cstream)
@@ -249,7 +251,7 @@ static int soc_compr_free(struct snd_compr_stream *cstream)
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int stream;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	if (cstream->direction == SND_COMPRESS_PLAYBACK)
 		stream = SNDRV_PCM_STREAM_PLAYBACK;
@@ -292,7 +294,7 @@ static int soc_compr_free(struct snd_compr_stream *cstream)
 					  SND_SOC_DAPM_STREAM_STOP);
 	}
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return 0;
 }
 
@@ -310,7 +312,9 @@ static int soc_compr_free_fe(struct snd_compr_stream *cstream)
 	else
 		stream = SNDRV_PCM_STREAM_CAPTURE;
 
+	mutex_lock_nested(&fe->card->pcm_mutex, fe->card->pcm_subclass);
 	snd_soc_runtime_deactivate(fe, stream);
+	mutex_unlock(&fe->card->pcm_mutex);
 
 	fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
 
@@ -355,7 +359,7 @@ static int soc_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret = 0, __ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	for_each_rtdcom(rtd, rtdcom) {
 		component = rtdcom->component;
@@ -384,7 +388,7 @@ static int soc_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 	}
 
 out:
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -394,6 +398,7 @@ static int soc_compr_trigger_fe(struct snd_compr_stream *cstream, int cmd)
 	struct snd_soc_component *component;
 	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_dai *cpu_dai = fe->cpu_dai;
+	enum snd_soc_dpcm_trigger trigger;
 	int ret = 0, __ret, stream;
 
 	if (cmd == SND_COMPR_TRIGGER_PARTIAL_DRAIN ||
@@ -418,7 +423,44 @@ static int soc_compr_trigger_fe(struct snd_compr_stream *cstream, int cmd)
 	else
 		stream = SNDRV_PCM_STREAM_CAPTURE;
 
+	trigger = fe->dai_link->trigger[stream];
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		switch (trigger) {
+		case SND_SOC_DPCM_TRIGGER_PRE_POST:
+			trigger = SND_SOC_DPCM_TRIGGER_PRE;
+			break;
+		case SND_SOC_DPCM_TRIGGER_POST_PRE:
+			trigger = SND_SOC_DPCM_TRIGGER_POST;
+			break;
+		default:
+			break;
+		}
+		break;
+	case SNDRV_PCM_TRIGGER_STOP:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		switch (trigger) {
+		case SND_SOC_DPCM_TRIGGER_PRE_POST:
+			trigger = SND_SOC_DPCM_TRIGGER_POST;
+			break;
+		case SND_SOC_DPCM_TRIGGER_POST_PRE:
+			trigger = SND_SOC_DPCM_TRIGGER_PRE;
+			break;
+		default:
+			break;
+		}
+		break;
+	}
+
 	mutex_lock_nested(&fe->card->mutex, SND_SOC_CARD_CLASS_RUNTIME);
+
+	if (trigger == SND_SOC_DPCM_TRIGGER_POST) {
+		fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
+		ret = dpcm_be_dai_trigger(fe, stream, cmd);
+	}
 
 	if (cpu_dai->driver->cops && cpu_dai->driver->cops->trigger) {
 		ret = cpu_dai->driver->cops->trigger(cstream, cmd, cpu_dai);
@@ -440,9 +482,10 @@ static int soc_compr_trigger_fe(struct snd_compr_stream *cstream, int cmd)
 	if (ret < 0)
 		goto out;
 
-	fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
-
-	ret = dpcm_be_dai_trigger(fe, stream, cmd);
+	if (trigger == SND_SOC_DPCM_TRIGGER_PRE) {
+		fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
+		ret = dpcm_be_dai_trigger(fe, stream, cmd);
+	}
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -474,7 +517,7 @@ static int soc_compr_set_params(struct snd_compr_stream *cstream,
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret = 0, __ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	/*
 	 * First we call set_params for the CPU DAI, then the component
@@ -518,14 +561,14 @@ static int soc_compr_set_params(struct snd_compr_stream *cstream,
 
 	/* cancel any delayed stream shutdown that is pending */
 	rtd->pop_wait = 0;
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 
 	cancel_delayed_work_sync(&rtd->delayed_work);
 
 	return ret;
 
 err:
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -554,6 +597,14 @@ static int soc_compr_set_params_fe(struct snd_compr_stream *cstream,
 	 */
 	memset(&fe->dpcm[fe_substream->stream].hw_params, 0,
 		sizeof(struct snd_pcm_hw_params));
+
+	component = fe->cpu_dai->component;
+	if (component->driver->compr_ops && component->driver->compr_ops->get_hw_params) {
+		ret = component->driver->compr_ops->get_hw_params(cstream,
+				&fe->dpcm[fe_substream->stream].hw_params);
+		if (ret < 0)
+			goto out;
+	}
 
 	fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
 
@@ -609,7 +660,7 @@ static int soc_compr_get_params(struct snd_compr_stream *cstream,
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret = 0, __ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	if (cpu_dai->driver->cops && cpu_dai->driver->cops->get_params) {
 		ret = cpu_dai->driver->cops->get_params(cstream, params, cpu_dai);
@@ -630,7 +681,7 @@ static int soc_compr_get_params(struct snd_compr_stream *cstream,
 	}
 
 err:
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -642,7 +693,7 @@ static int soc_compr_get_caps(struct snd_compr_stream *cstream,
 	struct snd_soc_rtdcom_list *rtdcom;
 	int ret = 0, __ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	for_each_rtdcom(rtd, rtdcom) {
 		component = rtdcom->component;
@@ -656,7 +707,7 @@ static int soc_compr_get_caps(struct snd_compr_stream *cstream,
 			ret = __ret;
 	}
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -668,7 +719,7 @@ static int soc_compr_get_codec_caps(struct snd_compr_stream *cstream,
 	struct snd_soc_rtdcom_list *rtdcom;
 	int ret = 0, __ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	for_each_rtdcom(rtd, rtdcom) {
 		component = rtdcom->component;
@@ -682,7 +733,7 @@ static int soc_compr_get_codec_caps(struct snd_compr_stream *cstream,
 			ret = __ret;
 	}
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -694,7 +745,7 @@ static int soc_compr_ack(struct snd_compr_stream *cstream, size_t bytes)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret = 0, __ret;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	if (cpu_dai->driver->cops && cpu_dai->driver->cops->ack) {
 		ret = cpu_dai->driver->cops->ack(cstream, bytes, cpu_dai);
@@ -715,7 +766,7 @@ static int soc_compr_ack(struct snd_compr_stream *cstream, size_t bytes)
 	}
 
 err:
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -728,7 +779,7 @@ static int soc_compr_pointer(struct snd_compr_stream *cstream,
 	int ret = 0, __ret;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	if (cpu_dai->driver->cops && cpu_dai->driver->cops->pointer)
 		cpu_dai->driver->cops->pointer(cstream, tstamp, cpu_dai);
@@ -745,7 +796,7 @@ static int soc_compr_pointer(struct snd_compr_stream *cstream,
 			ret = __ret;
 	}
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 
@@ -757,7 +808,7 @@ static int soc_compr_copy(struct snd_compr_stream *cstream,
 	struct snd_soc_rtdcom_list *rtdcom;
 	int ret = 0;
 
-	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
+	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
 	for_each_rtdcom(rtd, rtdcom) {
 		component = rtdcom->component;
@@ -770,7 +821,7 @@ static int soc_compr_copy(struct snd_compr_stream *cstream,
 		break;
 	}
 
-	mutex_unlock(&rtd->pcm_mutex);
+	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
 }
 

@@ -222,13 +222,23 @@ static void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 {
 	struct dwc3_ep		*dep;
 
+	if (dwc->eps[1]->endpoint.desc == NULL) {
+		dev_err(dwc->dev, "EP1 was disabled: DESC NULL\n");
+		return;
+	}
+	if (dwc->eps[0]->endpoint.desc == NULL) {
+		dev_err(dwc->dev, "EP0 was disabled: DESC NULL\n");
+		return;
+	}
+
 	/* reinitialize physical ep1 */
 	dep = dwc->eps[1];
 	dep->flags = DWC3_EP_ENABLED;
 
 	/* stall is always issued on EP0 */
 	dep = dwc->eps[0];
-	__dwc3_gadget_ep_set_halt(dep, 1, false);
+	/* mtp reset signal issue */
+	__dwc3_gadget_ep_set_halt(dep, 1, true);
 	dep->flags = DWC3_EP_ENABLED;
 	dwc->delayed_status = false;
 
@@ -334,8 +344,10 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 				usb_status |= 1 << USB_DEV_STAT_U1_ENABLED;
 			if (reg & DWC3_DCTL_INITU2ENA)
 				usb_status |= 1 << USB_DEV_STAT_U2_ENABLED;
+		} else if (dwc->usb_remote_wakeup) {
+			/* remote wakeup */
+			usb_status |= dwc->remote_wakeup_set << USB_INT_FUNCTION_REMOTE_WAKEUP;
 		}
-
 		break;
 
 	case USB_RECIP_INTERFACE:
@@ -343,6 +355,10 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 		 * Function Remote Wake Capable	D0
 		 * Function Remote Wakeup	D1
 		 */
+		if (dwc->usb_remote_wakeup) {
+			usb_status |= dwc->usb_remote_wakeup;
+			usb_status |= dwc->remote_wakeup_set << USB_INT_FUNCTION_REMOTE_WAKEUP;
+		}
 		break;
 
 	case USB_RECIP_ENDPOINT:
@@ -380,11 +396,21 @@ static int dwc3_ep0_handle_u1(struct dwc3 *dwc, enum usb_device_state state,
 			(dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS))
 		return -EINVAL;
 
+	/* see NEGATIVE RX DETECTION comment */
+	if (set && dwc->revision < DWC3_REVISION_230A)
+		return 0;
+
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	if (set)
 		reg |= DWC3_DCTL_INITU1ENA;
 	else
 		reg &= ~DWC3_DCTL_INITU1ENA;
+
+	/* usb connection issue : disable LGO_U1 Try*/
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+	reg &= ~DWC3_DCTL_INITU1ENA;
+#endif
+
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 
 	return 0;
@@ -394,7 +420,15 @@ static int dwc3_ep0_handle_u2(struct dwc3 *dwc, enum usb_device_state state,
 		int set)
 {
 	u32 reg;
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+	struct usb_composite_dev *cdev;
+	bool	disable_u2 = true;
 
+	cdev = get_gadget_data(&dwc->gadget);
+
+	if (cdev && cdev->flag_factory_for_u2)
+		disable_u2 = false;
+#endif
 
 	if (state != USB_STATE_CONFIGURED)
 		return -EINVAL;
@@ -402,11 +436,22 @@ static int dwc3_ep0_handle_u2(struct dwc3 *dwc, enum usb_device_state state,
 			(dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS))
 		return -EINVAL;
 
+	/* see NEGATIVE RX DETECTION comment */
+	if (set && dwc->revision < DWC3_REVISION_230A)
+		return 0;
+
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	if (set)
 		reg |= DWC3_DCTL_INITU2ENA;
 	else
 		reg &= ~DWC3_DCTL_INITU2ENA;
+
+/* usb connection issue : disable LGO_U2 Try*/
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+	if (disable_u2)
+		reg &= ~DWC3_DCTL_INITU2ENA;
+#endif
+
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 
 	return 0;
@@ -450,6 +495,7 @@ static int dwc3_ep0_handle_device(struct dwc3 *dwc,
 
 	switch (wValue) {
 	case USB_DEVICE_REMOTE_WAKEUP:
+		dwc->remote_wakeup_set = set;
 		break;
 	/*
 	 * 9.4.1 says only only for SS, in AddressState only for
@@ -491,6 +537,7 @@ static int dwc3_ep0_handle_intf(struct dwc3 *dwc,
 		 * For now, we're not doing anything, just making sure we return
 		 * 0 so USB Command Verifier tests pass without any errors.
 		 */
+		dwc->remote_wakeup_set = set;
 		break;
 	default:
 		ret = -EINVAL;
@@ -599,6 +646,15 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 	u32 cfg;
 	int ret;
 	u32 reg;
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+	struct usb_composite_dev *cdev;
+	bool	disable_u2 = true;
+
+	cdev = get_gadget_data(&dwc->gadget);
+
+	if (cdev && cdev->flag_factory_for_u2)
+		disable_u2 = false;
+#endif
 
 	cfg = le16_to_cpu(ctrl->wValue);
 
@@ -622,16 +678,53 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 						USB_STATE_CONFIGURED);
 
 			/*
-			 * Enable transition to U1/U2 state when
-			 * nothing is pending from application.
+			 * NEGATIVE RX DETECTION
+			 * Some host controllers (e.g. Intel) perform far-end
+			 * receiver termination _negative_ detection while link
+			 * is in U2 state. Synopsys PIPE PHY considers this
+			 * signalling as U2 LFPS exit, moves to Recovery state
+			 * and waits for training sequence which never comes.
+			 * This finally leads to reconnection. Starting from
+			 * DWC3 core 2.30a, GCTL register has bit U2EXIT_LFPS,
+			 * which improves interoperability with such HCs.
 			 */
-			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-			reg |= (DWC3_DCTL_ACCEPTU1ENA | DWC3_DCTL_ACCEPTU2ENA);
-			dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+			if (dwc->revision >= DWC3_REVISION_230A) {
+				/*
+				 * Enable transition to U1/U2 state when
+				 * nothing is pending from application.
+				 */
+				reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+				if (disable_u2)
+					reg |= DWC3_DCTL_ACCEPTU1ENA;
+				else
+					reg |= (DWC3_DCTL_ACCEPTU1ENA | DWC3_DCTL_ACCEPTU2ENA);
+#else
+				reg |= (DWC3_DCTL_ACCEPTU1ENA | DWC3_DCTL_ACCEPTU2ENA);
+#endif
+				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+			}
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+			/* Disable U2 mode */
+			if (disable_u2) {
+				reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+				reg &= ~(DWC3_DCTL_INITU2ENA);
+				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+			}
+
+			pr_info("<<< %s, set addr - cancel reset_work\n", __func__);
+				cancel_delayed_work(&dwc->dwc3_reset_delayed_work);
+			dwc->retry_cnt = 0;
+#endif
 		}
 		break;
 
 	case USB_STATE_CONFIGURED:
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+		pr_info("<<< %s, set config - cancel reset_work\n", __func__);
+		cancel_delayed_work(&dwc->dwc3_reset_delayed_work);
+		dwc->retry_cnt = 0;
+#endif
 		ret = dwc3_ep0_delegate_req(dwc, ctrl);
 		if (!cfg && !ret)
 			usb_gadget_set_state(&dwc->gadget,
@@ -757,6 +850,12 @@ static int dwc3_ep0_std_request(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		ret = dwc3_ep0_set_address(dwc, ctrl);
 		break;
 	case USB_REQ_SET_CONFIGURATION:
+		if (dwc->gadget.speed == USB_SPEED_SUPER)
+			dwc->vbus_current = USB_CURRENT_SUPER_SPEED;
+		else
+			dwc->vbus_current = USB_CURRENT_HIGH_SPEED;
+		schedule_work(&dwc->set_vbus_current_work);
+
 		ret = dwc3_ep0_set_config(dwc, ctrl);
 		break;
 	case USB_REQ_SET_SEL:

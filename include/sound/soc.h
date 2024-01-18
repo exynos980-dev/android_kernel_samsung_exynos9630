@@ -808,7 +808,7 @@ struct snd_soc_component_driver {
 	const char *ignore_machine;
 	const char *topology_name_prefix;
 	int (*be_hw_params_fixup)(struct snd_soc_pcm_runtime *rtd,
-				  struct snd_pcm_hw_params *params);
+				  struct snd_pcm_hw_params *params, int stream);
 	bool use_dai_pcm_id;	/* use the DAI link PCM ID as PCM device number */
 	int be_pcm_base;	/* base device ID for all BE PCMs */
 };
@@ -929,7 +929,7 @@ struct snd_soc_dai_link {
 
 	/* optional hw_params re-writing for BE and FE sync */
 	int (*be_hw_params_fixup)(struct snd_soc_pcm_runtime *rtd,
-			struct snd_pcm_hw_params *params);
+			struct snd_pcm_hw_params *params, int stream);
 
 	/* machine stream operations */
 	const struct snd_soc_ops *ops;
@@ -1020,6 +1020,10 @@ struct snd_soc_card {
 
 	struct mutex mutex;
 	struct mutex dapm_mutex;
+
+	/* Mutex for PCM operations */
+	struct mutex pcm_mutex;
+	enum snd_soc_pcm_subclass pcm_subclass;
 
 	bool instantiated;
 	bool topology_shortname_created;
@@ -1120,8 +1124,6 @@ struct snd_soc_pcm_runtime {
 	struct device *dev;
 	struct snd_soc_card *card;
 	struct snd_soc_dai_link *dai_link;
-	struct mutex pcm_mutex;
-	enum snd_soc_pcm_subclass pcm_subclass;
 	struct snd_pcm_ops ops;
 
 	/* Dynamic PCM BE runtime data */

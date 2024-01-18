@@ -209,6 +209,10 @@ gs_send_packet(struct gs_port *port, char *packet, unsigned size)
 	return size;
 }
 
+#ifdef CONFIG_USB_SS_REMOTE_WAKEUP
+extern int mbim_resume_cmpl;
+#endif
+
 /*
  * gs_start_tx
  *
@@ -231,10 +235,28 @@ __acquires(&port->port_lock)
 	int			status = 0;
 	bool			do_tty_wake = false;
 
+#ifdef CONFIG_USB_SS_REMOTE_WAKEUP
+	int		cnt;
+#endif
+
 	if (!port->port_usb)
 		return status;
 
 	in = port->port_usb->in;
+
+#ifdef CONFIG_USB_SS_REMOTE_WAKEUP
+	cnt = 0;
+	while (!mbim_resume_cmpl) {
+		pr_info("%s: wait system resume for %d msesc\n", __func__, cnt * 10);
+
+		if (cnt > 10) {
+			pr_info("%s: wait timeout for 100ms ! keep going\n", __func__);
+			break;
+		}
+		mdelay(10);
+		cnt++;
+	}
+#endif
 
 	while (!port->write_busy && !list_empty(pool)) {
 		struct usb_request	*req;
@@ -568,7 +590,7 @@ static int gs_start_io(struct gs_port *port)
 	started = gs_start_rx(port);
 
 	/* unblock any pending writes into our circular buffer */
-	if (started) {
+	if (started && port->port.tty) {
 		tty_wakeup(port->port.tty);
 	} else {
 		gs_free_requests(ep, head, &port->read_allocated);
@@ -1225,7 +1247,12 @@ int gserial_alloc_line(unsigned char *line_num)
 	coding.bParityType = USB_CDC_NO_PARITY;
 	coding.bDataBits = USB_CDC_1_STOP_BITS;
 
-	for (port_num = 0; port_num < MAX_U_SERIAL_PORTS; port_num++) {
+	if (*line_num)
+		port_num =  *line_num;
+	else
+		port_num = 0;
+
+	for (; port_num < MAX_U_SERIAL_PORTS; port_num++) {
 		ret = gs_port_alloc(port_num, &coding);
 		if (ret == -EBUSY)
 			continue;

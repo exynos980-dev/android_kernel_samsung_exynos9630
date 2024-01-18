@@ -56,11 +56,19 @@ enum phy_mode {
 struct phy_ops {
 	int	(*init)(struct phy *phy);
 	int	(*exit)(struct phy *phy);
+	int     (*tune)(struct phy *phy, int phy_state);
+	int     (*vendor_set)(struct phy *phy, int is_enable, int is_cancel);
+	void     (*conn)(struct phy *phy, int is_conn);
+	int	(*ilbk)(struct phy *phy);
+	int     (*set)(struct phy *phy, int option, void *info);
 	int	(*power_on)(struct phy *phy);
 	int	(*power_off)(struct phy *phy);
 	int	(*set_mode)(struct phy *phy, enum phy_mode mode);
 	int	(*reset)(struct phy *phy);
 	int	(*calibrate)(struct phy *phy);
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+	int 	(*rewa_irq)(struct phy *phy);
+#endif
 	struct module *owner;
 };
 
@@ -160,9 +168,17 @@ void phy_pm_runtime_allow(struct phy *phy);
 void phy_pm_runtime_forbid(struct phy *phy);
 int phy_init(struct phy *phy);
 int phy_exit(struct phy *phy);
+int phy_tune(struct phy *phy, int phy_state);
+int phy_vendor_set(struct phy *phy, int is_enable, int is_cancel);
+void phy_conn(struct phy *phy, int is_conn);
+int phy_ilbk(struct phy *phy);
+int phy_set(struct phy *phy, int option, void *info);
 int phy_power_on(struct phy *phy);
 int phy_power_off(struct phy *phy);
 int phy_set_mode(struct phy *phy, enum phy_mode mode);
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+int phy_rewa_irq(struct phy *phy);
+#endif
 static inline enum phy_mode phy_get_mode(struct phy *phy)
 {
 	return phy->attrs.mode;
@@ -262,6 +278,41 @@ static inline int phy_exit(struct phy *phy)
 	return -ENOSYS;
 }
 
+static inline int phy_tune(struct phy *phy, int phy_state)
+{
+       if (!phy)
+               return 0;
+       return -ENOSYS;
+}
+
+static inline int phy_vendor_set(struct phy *phy, int is_enable, int is_rewa)
+{
+       if (!phy)
+               return 0;
+       return -ENOSYS;
+}
+
+static inline int phy_conn(struct phy *phy, int is_conn)
+{
+       if (!phy)
+               return 0;
+       return -ENOSYS;
+}
+
+static inline int phy_ilbk(struct phy *phy)
+{
+	if (!phy)
+		return 0;
+	return -ENOSYS;
+}
+
+static inline int phy_set(struct phy *phy, int option, void *info)
+{
+       if (!phy)
+               return 0;
+       return -ENOSYS;
+}
+
 static inline int phy_power_on(struct phy *phy)
 {
 	if (!phy)
@@ -287,6 +338,15 @@ static inline enum phy_mode phy_get_mode(struct phy *phy)
 {
 	return PHY_MODE_INVALID;
 }
+
+#ifdef CONFIG_USB_CONFIGFS_F_MBIM
+static inline int phy_rewa_irq(struct phy *phy)
+{
+	if (!phy)
+		return 0;
+	return -ENOSYS;
+}
+#endif
 
 static inline int phy_reset(struct phy *phy)
 {
