@@ -977,10 +977,10 @@ static int mms_alert_handler_proximity_state(struct mms_ts_info *info, u8 data)
 		}
 	}
 
-	input_info(true, &info->client->dev, "%s: hover %d\n", __func__, data);
+	input_info(true, &info->client->dev, "%s: hover %d\n", __func__, !data);
 	info->hover_event = data;
 
-	input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, data);
+	input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, !data);
 	input_sync(info->input_dev_proximity);
 	return 0;
 }
