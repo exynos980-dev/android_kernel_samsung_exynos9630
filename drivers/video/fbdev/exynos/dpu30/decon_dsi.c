@@ -471,12 +471,24 @@ err:
 	return ret;
 }
 
+static u8 decon_edid_get_checksum(const u8 *raw_edid)
+{
+	int i;
+	u8 csum = 0;
+
+	for (i = 0; i < EDID_BLOCK_SIZE; i++)
+		csum += raw_edid[i];
+
+	return csum;
+}
+
 void decon_get_edid(struct decon_device *decon, struct decon_edid_data *edid_data)
 {
 	struct edid edid;
 	const u8 edid_header[] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00};
+	const u8 edid_display_name[] = {0x73, 0x61, 0x6d, 0x73, 0x75, 0x6e, 0x67, 0x20, 0x6c, 0x63, 0x64, 0x20, 0x20};
 
-	decon_dbg("%s: edid size = %d, header size = %d\n", __func__,
+	decon_dbg("%s: edid size = %lu, header size = %lu\n", __func__,
 			sizeof(struct edid), sizeof(edid_header));
 	memset(&edid, 0, sizeof(struct edid));
 	memcpy(&edid, edid_header, sizeof(edid_header));
@@ -487,6 +499,17 @@ void decon_get_edid(struct decon_device *decon, struct decon_edid_data *edid_dat
 	 *
 	 * ex) edid.width_cm = xx; edid.height_cm = yy
 	 */
+	edid.mfg_id[0] = 0x4C;    // manufacturer ID for samsung
+	edid.mfg_id[1] = 0x2D;
+	edid.mfg_week = 0x10;	/* 16 week */
+	edid.mfg_year = 0x1E;	/* 1990 + 30 = 2020 year */
+	edid.detailed_timings[0].data.other_data.type = 0xfc;  // for display name
+	memcpy(edid.detailed_timings[0].data.other_data.data.str.str, edid_display_name, 13);
+	/* sum of all 128 bytes should equal 0 (mod 0x100) */
+	edid.checksum = 0x100 - decon_edid_get_checksum((const u8 *)&edid);
+
+	decon_info("%s: checksum(0x%x)\n", __func__,
+			decon_edid_get_checksum((const u8 *)&edid));
 
 	memcpy(edid_data->edid_data, &edid, EDID_BLOCK_SIZE);
 	edid_data->size = EDID_BLOCK_SIZE;
