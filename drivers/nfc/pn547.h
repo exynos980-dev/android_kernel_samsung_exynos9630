@@ -24,7 +24,7 @@
  * PN544_SET_PWR(1): power on
  * PN544_SET_PWR(2): reset and power on with firmware download enabled
  */
-#define PN547_SET_PWR	_IOW(PN547_MAGIC, 0x01, long)
+#define PN547_SET_PWR	_IOW(PN547_MAGIC, 0x01, unsigned int)
 
 /*
  * SPI Request NFCC to enable p61 power, only in param
@@ -32,48 +32,48 @@
  * level 1 = Enable power
  * level 0 = Disable power
  */
-#define P61_SET_SPI_PWR    _IOW(PN547_MAGIC, 0x02, long)
+#define P61_SET_SPI_PWR    _IOW(PN547_MAGIC, 0x02, unsigned int)
 
 /* SPI or DWP can call this ioctl to get the current
  * power state of P61
  *
  */
-#define P61_GET_PWR_STATUS    _IOR(PN547_MAGIC, 0x03, long)
+#define P61_GET_PWR_STATUS    _IOR(PN547_MAGIC, 0x03, unsigned int)
 
 /* DWP side this ioctl will be called
  * level 1 = Wired access is enabled/ongoing
  * level 0 = Wired access is disalbed/stopped
  */
-#define P61_SET_WIRED_ACCESS _IOW(PN547_MAGIC, 0x04, long)
+#define P61_SET_WIRED_ACCESS _IOW(PN547_MAGIC, 0x04, unsigned int)
 
 /*
  *  NFC Init will call the ioctl to register the PID with the i2c driver
  */
-#define P547_SET_NFC_SERVICE_PID _IOW(PN547_MAGIC, 0x05, long)
+#define P547_SET_NFC_SERVICE_PID _IOW(PN547_MAGIC, 0x05, unsigned int)
 
 /*
  * NFC and SPI will call the ioctl to get the i2c/spi bus access
  */
-#define P547_GET_ESE_ACCESS _IOW(PN547_MAGIC, 0x06, long)
+#define P547_GET_ESE_ACCESS _IOW(PN547_MAGIC, 0x06, unsigned int)
 
 /*
  * NFC and SPI will call the ioctl to update the power scheme
  */
-#define P547_SET_POWER_SCHEME _IOW(PN547_MAGIC, 0x07, long)
+#define P547_SET_POWER_SCHEME _IOW(PN547_MAGIC, 0x07, unsigned int)
 
 /*
  * NFC will call the ioctl to release the svdd protection
  */
-#define P547_REL_SVDD_WAIT _IOW(PN547_MAGIC, 0x08, long)
+#define P547_REL_SVDD_WAIT _IOW(PN547_MAGIC, 0x08, unsigned int)
 
 /* SPI or DWP can call this ioctl to get the current
  * power state of P61
  */
-#define PN547_SET_DWNLD_STATUS    _IOW(PN547_MAGIC, 0x09, long)
+#define PN547_SET_DWNLD_STATUS    _IOW(PN547_MAGIC, 0x09, unsigned int)
 /*
  *  NFC will call the ioctl to release the dwp on/off protection
  */
-#define P547_REL_DWPONOFF_WAIT _IOW(PN547_MAGIC, 0x0A, long)
+#define P547_REL_DWPONOFF_WAIT _IOW(PN547_MAGIC, 0x0A, unsigned int)
 
 
 #define NFC_I2C_LDO_ON	1
