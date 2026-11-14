@@ -624,6 +624,10 @@ static irqreturn_t power_keys_rising_irq_handler(int irq, void *dev_id)
 
 	state = true;
 #endif
+	if (test_bit(bdata->button->code, bdata->input->key)) {
+		input_report_key(bdata->input, bdata->button->code, 0);
+		input_sync(bdata->input);
+	}
 	bdata->key_pressed = true;
 	bdata->isr_status = true;
 
@@ -967,6 +971,15 @@ static int power_keys_probe(struct platform_device *pdev)
 	pmic_key_get_pwrkey = s2mpu10_get_pwrkey_value;
 #endif
 	s2mpu10_key_pdev = pdev;
+
+	for (i = 0; i < ddata->pdata->nbuttons; i++) {
+		struct power_button_data *bdata = &ddata->button_data[i];
+
+		if (bdata->button->code != KEY_POWER)
+			continue;
+		bdata->key_pressed = s2mpu10_get_pwrkey_value();
+		power_keys_power_report_event(bdata);
+	}
 
 #ifdef CONFIG_DRV_SAMSUNG
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
